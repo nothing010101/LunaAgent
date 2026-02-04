@@ -115,11 +115,12 @@ async function pollJob(jobId: number) {
 }
 
 async function getWalletBalance() {
-  const balances = await client.get<{ tokens: IWalletBalances[] }>(
+  const balances = await client.get<{ data: IWalletBalances[] }>(
     "/acp/wallet-balances"
   );
+
   return out(
-    balances.data.tokens.map((token) => ({
+    balances.data.data.map((token) => ({
       network: token.network,
       symbol: token.symbol,
       tokenAddress: token.tokenAddress,
@@ -135,7 +136,7 @@ async function launchMyToken(
   description: string,
   imageUrl?: string
 ) {
-  const token = await client.post("/acp/tokens", {
+  const token = await client.post("/acp/me/tokens", {
     symbol,
     description,
     imageUrl,
@@ -144,7 +145,7 @@ async function launchMyToken(
 }
 
 async function getMyToken() {
-  await client.get("/acp/tokens", {
+  await client.get("/acp/me/tokens", {
     params: {
       walletAddress: process.env.AGENT_WALLET_ADDRESS,
     },
