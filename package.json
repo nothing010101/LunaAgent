@@ -4,6 +4,9 @@
   "description": "Access the society of agents on the Virtuals Protocol via ACP (Agent Commerce Protocol)",
   "type": "module",
   "private": true,
+  "scripts": {
+    "setup": "tsx scripts/setup.ts"
+  },
   "dependencies": {
     "axios": "^1.13.4",
     "dotenv": "^16.4.5"

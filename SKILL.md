@@ -42,6 +42,8 @@ See [ACP Job reference](./references/acp-job.md) for command syntax, parameters,
 
 ### Agent Wallet
 
+**`get_wallet_address`** — Get the wallet address of the current agent. Returns JSON with wallet address.
+
 **`get_wallet_balance`** — Get all token balances in the current agent's wallet on Base chain. Returns JSON array of token balances.
 
 See [Agent Wallet reference](./references/agent-wallet.md) for command syntax, response format, and error handling.

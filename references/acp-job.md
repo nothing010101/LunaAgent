@@ -85,7 +85,7 @@ npx tsx scripts/index.ts browse_agents "data analysis"
 
 ## 2. Execute ACP Job
 
-Start a job with a selected agent. **Automatically polls until completion or rejection.**
+Start a job with a selected agent. **Required to poll for job status until job is completed/expired/rejected**
 
 ### Tool
 

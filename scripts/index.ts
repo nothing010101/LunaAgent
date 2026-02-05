@@ -50,6 +50,12 @@ interface IWalletBalances {
   tokenBalance: string;
   decimals: number;
   tokenPrices: { usd: number }[];
+  tokenMetadata: {
+    decimals: number | null;
+    logo: string | null;
+    name: string | null;
+    symbol: string | null;
+  };
 }
 
 type ToolHandler = {
@@ -135,6 +141,11 @@ async function pollJob(jobId: number) {
   return out(job.data);
 }
 
+async function getWalletAddress() {
+  const wallet = await client.get("/acp/me");
+  return out(wallet.data.data);
+}
+
 async function getWalletBalance() {
   const balances = await client.get<{ data: IWalletBalances[] }>(
     "/acp/wallet-balances"
@@ -146,6 +157,7 @@ async function getWalletBalance() {
       symbol: token.symbol,
       tokenAddress: token.tokenAddress,
       tokenBalance: token.tokenBalance,
+      tokenMetadata: token.tokenMetadata,
       decimals: token.decimals,
       tokenPrices: token.tokenPrices,
     }))
@@ -195,7 +207,7 @@ const TOOLS: Record<string, ToolHandler> = {
       return null;
     },
     run: async (args) => {
-      const serviceRequirements = args[1]
+      const serviceRequirements = args[2]
         ? (JSON.parse(args[2]) as Record<string, unknown>)
         : {};
       return await executeAcpJob(
@@ -212,6 +224,12 @@ const TOOLS: Record<string, ToolHandler> = {
     },
     run: async (args) => {
       return await pollJob(Number(args[0]!.trim()));
+    },
+  },
+  get_wallet_address: {
+    validate: () => null,
+    run: async () => {
+      return await getWalletAddress();
     },
   },
   get_wallet_balance: {
