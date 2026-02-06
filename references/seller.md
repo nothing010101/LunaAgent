@@ -9,21 +9,26 @@ Follow this guide **step by step** when a user wants to create a new offering. D
 Before writing any code or files, have a conversation to fully understand the offering. Ask about each of the following topics (adapt the phrasing naturally, but cover every point):
 
 1. **What does the job do?**
+
    - "Describe what this service does for the client agent. What problem does it solve?"
    - Arrive at a clear **name** and **description** for the offering.
 
 2. **Does the user already have existing functionality?**
+
    - "Do you already have code, an API, or logic that this job should wrap or call into?"
    - If yes, understand what it does, what inputs it expects, and what it returns. This will shape the `executeJob` handler.
 
 3. **What are the job inputs?**
+
    - "What information does the client need to provide when requesting this job?"
    - Identify required vs optional fields and their types. These become the `requirement` JSON Schema in `offering.json`.
 
 4. **What is the fee?**
+
    - "What fixed `jobFee` should be charged per job?" (number, \( \ge 0 \))
 
 5. **Does this job require additional funds transfer beyond the fixed fee?**
+
    - "Beyond the fixed fee, does the client need to send additional tokens for the job to execute?" → determines `requiredFunds` (true/false)
    - **If yes**, dig deeper:
      - "How is the transfer amount determined?" — fixed value, derived from the request, or calculated?
@@ -31,6 +36,7 @@ Before writing any code or files, have a conversation to fully understand the of
      - This shapes the `requestAdditionalFunds` handler.
 
 6. **Execution logic**
+
    - "Walk me through what should happen when a job request comes in."
    - Understand the core logic that `executeJob` needs to perform and what it returns.
 
@@ -49,6 +55,7 @@ Once the interview is complete, create the files:
 1. Create directory `seller/offerings/<name>/`
 
 2. Create `seller/offerings/<name>/offering.json`:
+
    ```json
    {
      "name": "<name>",
@@ -64,9 +71,41 @@ Once the interview is complete, create the files:
      }
    }
    ```
+
    The `requirement` field uses **JSON Schema** to describe the expected job inputs. It is sent to the ACP API during registration so client agents know what to provide.
 
 3. Create `seller/offerings/<name>/handlers.ts` with the required and any optional handlers (see Handler Reference below).
+
+   **Template structure:**
+
+   ```typescript
+   import type { ExecuteJobResult } from "../../runtime/offeringTypes.js";
+
+   // Required handler
+   export async function executeJob(request: any): Promise<ExecuteJobResult> {
+     // Your implementation here
+     return { deliverable: "result" };
+   }
+
+   // Optional: validation handler
+   export function validateRequirements(request: any): boolean {
+     // Return true to accept, false to reject
+     return true;
+   }
+
+   // Optional: funds request handler (only if requiredFunds: true)
+   export function requestAdditionalFunds(request: any): {
+     amount: number;
+     tokenAddress: string;
+     recipient: string;
+   } {
+     return {
+       amount: 0,
+       tokenAddress: "0x...",
+       recipient: "0x...",
+     };
+   }
+   ```
 
 ---
 
@@ -103,6 +142,7 @@ npm run seller:run
 ```
 
 To delist an offering later:
+
 ```bash
 npm run offering:delete -- "<offering-name>"
 ```
@@ -111,10 +151,12 @@ npm run offering:delete -- "<offering-name>"
 
 ## Handler Reference
 
+**Important:** All handlers must be **exported** functions. The runtime imports them dynamically, so they must be exported using `export function` or `export async function`.
+
 ### Execution handler (required)
 
 ```typescript
-async function executeJob(request: any): Promise<ExecuteJobResult>
+export async function executeJob(request: any): Promise<ExecuteJobResult>;
 ```
 
 Where `ExecuteJobResult` is:
@@ -126,13 +168,19 @@ interface ExecuteJobResult {
   /** The job result — a simple string or structured object. */
   deliverable: string | { type: string; value: unknown };
   /** Optional: instruct the runtime to transfer tokens back to the buyer. */
-  payableDetails?: { tokenAddress: string; amount: number };
+  payableDetails?: {
+    /** Token contract address (ERC-20 CA). */
+    tokenAddress: string;
+    /** Amount to transfer (in number format). */
+    amount: number;
+  };
 }
 ```
 
-Executes the job and returns the result. If the job involves returning funds to the buyer (e.g. a swap, refund, or payout), include a `transfer` with the token contract address and amount.
+Executes the job and returns the result. If the job involves returning funds to the buyer (e.g. a swap, refund, or payout), include `payableDetails` with the token contract address and amount.
 
 **Simple example** (no transfer):
+
 ```typescript
 export async function executeJob(request: any): Promise<ExecuteJobResult> {
   return { deliverable: `Done: ${request.task}` };
@@ -140,12 +188,20 @@ export async function executeJob(request: any): Promise<ExecuteJobResult> {
 ```
 
 **Example with funds transfer back to buyer:**
+
 ```typescript
 export async function executeJob(request: any): Promise<ExecuteJobResult> {
-  const result = await performSwap(request.inputToken, request.outputToken, request.amount);
+  const result = await performSwap(
+    request.inputToken,
+    request.outputToken,
+    request.amount
+  );
   return {
     deliverable: { type: "swap_result", value: result },
-    transfer: { ca: request.outputToken, amount: result.outputAmount },
+    payableDetails: {
+      tokenAddress: request.outputToken,
+      amount: result.outputAmount,
+    },
   };
 }
 ```
@@ -155,14 +211,15 @@ export async function executeJob(request: any): Promise<ExecuteJobResult> {
 Provide this if requests need to be validated and rejected early.
 
 ```typescript
-function validateRequirements(request: any): boolean
+export function validateRequirements(request: any): boolean;
 ```
 
 Returns `true` to accept, `false` to reject.
 
 **Example:**
+
 ```typescript
-function validateRequirements(request: any): boolean {
+export function validateRequirements(request: any): boolean {
   return request.amount > 0 && request.amount <= 1000000;
 }
 ```
@@ -175,17 +232,27 @@ Provide this handler **only** when the job requires the client to transfer addit
 - If `requiredFunds: false` → `handlers.ts` **must not** export `requestAdditionalFunds`.
 
 ```typescript
-function requestAdditionalFunds(request: any): { amount: number; ca: string; symbol: string }
+export function requestAdditionalFunds(request: any): {
+  amount: number;
+  tokenAddress: string;
+  recipient: string;
+};
 ```
 
 Returns the funds transfer instruction:
+
 - `amount` — amount of additional funds required in ETHER unit
 - `tokenAddress` — token contract address
 - `recipient` — recipient of the funds
 
 **Example:**
+
 ```typescript
-function requestAdditionalFunds(request: any): { amount: number; ca: string; symbol: string } {
+function requestAdditionalFunds(request: any): {
+  amount: number;
+  tokenAddress: string;
+  recipient: string;
+} {
   return {
     amount: request.swapAmount,
     tokenAddress: request.tokenAddress,
