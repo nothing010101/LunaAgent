@@ -67,25 +67,25 @@ function validateOfferingJson(filePath: string): ValidationResult {
 
   if (!json.name || typeof json.name !== "string" || json.name.trim() === "") {
     result.valid = false;
-    result.errors.push('"name" field is required (non-empty string)');
+    result.errors.push('offering.json: "name" is required — set to a non-empty string matching the directory name');
   }
   if (!json.description || typeof json.description !== "string" || json.description.trim() === "") {
     result.valid = false;
-    result.errors.push('"description" field is required (non-empty string)');
+    result.errors.push('offering.json: "description" is required — describe what this service does for buyers');
   }
   if (json.jobFee === undefined || json.jobFee === null) {
     result.valid = false;
-    result.errors.push('"jobFee" field is required (number)');
+    result.errors.push('offering.json: "jobFee" is required — set to a number >= 0 (fee in USDC per job)');
   } else if (typeof json.jobFee !== "number" || json.jobFee < 0) {
     result.valid = false;
-    result.errors.push('"jobFee" must be a non-negative number');
+    result.errors.push('offering.json: "jobFee" must be a non-negative number (fee in USDC per job)');
   }
   if (json.requiredFunds === undefined || json.requiredFunds === null) {
     result.valid = false;
-    result.errors.push('"requiredFunds" field is required (boolean)');
+    result.errors.push('offering.json: "requiredFunds" is required — set to true if the job needs additional token transfer beyond the fee, false otherwise');
   } else if (typeof json.requiredFunds !== "boolean") {
     result.valid = false;
-    result.errors.push('"requiredFunds" must be a boolean');
+    result.errors.push('offering.json: "requiredFunds" must be true or false');
   }
 
   return result;
@@ -111,7 +111,7 @@ function validateHandlers(filePath: string, requiredFunds?: boolean): Validation
 
   if (!executeJobPatterns.some((p) => p.test(content))) {
     result.valid = false;
-    result.errors.push('handlers.ts must export an "executeJob" function');
+    result.errors.push('handlers.ts: must export an "executeJob" function — this is the required handler that runs your service logic');
   }
 
   const hasValidate = [
@@ -127,15 +127,15 @@ function validateHandlers(filePath: string, requiredFunds?: boolean): Validation
   ].some((p) => p.test(content));
 
   if (!hasValidate) {
-    result.warnings.push('Optional: "validateRequirements" handler not found.');
+    result.warnings.push('handlers.ts: optional "validateRequirements" handler not found — requests will be accepted without validation');
   }
   if (requiredFunds === true && !hasFunds) {
     result.valid = false;
-    result.errors.push('"requiredFunds" is true — handlers.ts must export "requestAdditionalFunds"');
+    result.errors.push('handlers.ts: "requiredFunds" is true in offering.json — must export "requestAdditionalFunds" to specify the token transfer details');
   }
   if (requiredFunds === false && hasFunds) {
     result.valid = false;
-    result.errors.push('"requiredFunds" is false — handlers.ts must NOT export "requestAdditionalFunds"');
+    result.errors.push('handlers.ts: "requiredFunds" is false in offering.json — must NOT export "requestAdditionalFunds" (remove it, or set requiredFunds to true)');
   }
 
   return result;
@@ -167,18 +167,12 @@ export async function init(offeringName: string): Promise<void> {
 
   fs.mkdirSync(dir, { recursive: true });
 
-  const offeringJson = {
+  const offeringJson: Record<string, unknown> = {
     name: offeringName,
-    description: "TODO: Describe what this service does",
-    jobFee: 1,
-    requiredFunds: false,
-    requirement: {
-      type: "object",
-      properties: {
-        input: { type: "string", description: "TODO: Describe input" },
-      },
-      required: ["input"],
-    },
+    description: "",
+    jobFee: null,
+    requiredFunds: null,
+    requirement: {},
   };
 
   fs.writeFileSync(
@@ -443,6 +437,9 @@ function detectHandlers(offeringDir: string): string[] {
   }
   if (/export\s+(async\s+)?function\s+validateRequirements\s*\(/.test(content)) {
     found.push("validateRequirements");
+  }
+  if (/export\s+(async\s+)?function\s+requestPayment\s*\(/.test(content)) {
+    found.push("requestPayment");
   }
   if (/export\s+(async\s+)?function\s+requestAdditionalFunds\s*\(/.test(content)) {
     found.push("requestAdditionalFunds");
