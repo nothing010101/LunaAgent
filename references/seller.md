@@ -63,9 +63,24 @@ Before writing any code or files to set the job up, clearly understand what is b
 
    - "Walk me through what should happen when a job request comes in."
    - Understand the core logic that `executeJob` needs to perform and what it returns.
+   - `executeJob` can do anything — there are no constraints on what runs inside it. Common patterns include:
+     - **API calls** — call an external API (market data, weather, social media, LLM inference, etc.) and return the response
+     - **Agentic workflows** — run a multi-step autonomous workflow, subagents (e.g. research a topic across multiple sources, generate a report, plan and execute a strategy)
+     - **On-chain operations** — execute transactions, swaps, bridge tokens, interact with smart contracts
+     - **Computation** — run calculations, simulations, data analysis, or any local logic
+     - **Code/script execution** — run a script, shell command, or subprocess
+     - **Anything else** — access specialised hardware, generate media, manage files, orchestrate other services
+   - The deliverable returned can be a plain text string, structured data, a transaction hash, a URL, or any result that is meaningful, of value, or proof of work executed and expected to be delivered to the buyer based on the job/task listed.
 
-7. **Validation needs (optional)**
-   - "Are there any requests that should be rejected upfront?" (e.g. amount out of range, missing fields)
+7. **Does the job return funds/tokens/assets back to the buyer as part of the deliverable?**
+
+   - "After executing the job, does the seller need to send tokens or assets back to the buyer?" — determines whether `executeJob` returns a `payableDetail`.
+   - For example: a token swap job receives USDC from the buyer, performs the swap, and returns the swapped tokens back. A yield farming withdrawal job returns the withdrawn funds + earned profits.
+   - Note: `requestAdditionalFunds` (funds in) and `payableDetail` (funds out) do not have to be in the same job. A deposit job may only receive funds, while a separate withdrawal job may only return funds.
+   - **If yes**, understand what token and how the amount is determined. This shapes the `payableDetail` in the `executeJob` return value.
+
+8. **Validation needs (optional)**
+   - "Are there any requests that should be rejected upfront?" (e.g. amount out of range, missing fields, invalid requirements and requests)
    - If yes, this becomes the `validateRequirements` handler.
 
 **Do not proceed to Phase 2 until you have clear answers for all of the above.**
@@ -262,11 +277,45 @@ Understanding how the seller runtime processes a job helps you implement handler
 
 6. After the buyer pays → the job transitions to the **transaction phase**
 7. **`executeJob(request)`** is called — this is where your service logic runs
-8. The result (deliverable) is sent back to the buyer, completing the job
+8. The result (deliverable) is sent back to the buyer, completing the job:
+   - The `deliverable` (text result or structured data) is always returned
+   - If `payableDetail` is included, ACP also transfers the specified tokens back to the buyer from the seller agent wallet (e.g. swapped tokens, profits, refunds)
 
-**Key takeaway:** `executeJob` runs **after** the buyer has paid. You don't need to handle payment logic inside `executeJob` — the runtime and ACP protocol handle that.
+**Note:** `executeJob` runs **after** the buyer has paid. You don't need to handle payment logic inside `executeJob` — the runtime and ACP protocol handle that.
 
 > **Fully automated:** Once you run `acp serve start`, the seller runtime handles everything automatically — accepting requests, requesting payment, waiting for payment, executing your handler, and delivering results back to the buyer. You do not need to manually trigger any steps or poll for jobs. Your only responsibility is implementing the handlers in `handlers.ts`.
+
+### Fund Flows Through ACP
+
+All fund transfers (outside of job fees) between buyer and seller — in both directions — must flow through the ACP protocol. Do not transfer funds directly between wallets outside of ACP.
+
+There are two mechanisms for moving funds, and they are independent of each other:
+
+- **Receiving funds from the buyer** (`requestAdditionalFunds`) — Used when the seller needs the buyer's assets to perform the job (e.g. tokens to swap, capital to invest). This happens during the payment phase, before `executeJob` runs. The handler specifies what token, how much, and where to send it.
+
+- **Returning funds to the buyer** (`payableDetail` in `executeJob` result) — Used when the job produces assets that belong to the buyer (e.g. swapped tokens, withdrawn funds, refunds). This is included in the `executeJob` return value and delivered alongside the result. The handler specifies what token and how much — ACP routes it back to the buyer automatically.
+
+The `jobFee` is always paid by the buyer as part of the payment phase and is handled automatically by the protocol — your handlers do not need to deal with it.
+
+These two directions do not have to appear in the same job. A job may only receive funds, only return funds, both, or neither:
+
+| Pattern | `requestAdditionalFunds` | `payableDetail` | Example |
+|---|---|---|---|
+| No funds | - | - | Data analysis, content generation |
+| Funds in only | Yes | - | yield farming deposit, fund management, opening a trading/betting/prediction market position |
+| Funds out only | - | Yes | yield withdrawal, refund, closing a trading/betting/prediction market position |
+| Funds in + out | Yes | Yes | token swap, arbitrage |
+
+**Example — token swap (funds in + out in a single job):**
+1. Buyer requests a swap of 100 USDC → ETH
+2. `requestAdditionalFunds` tells the buyer: send 100 USDC to seller's wallet
+3. Buyer pays the `jobFee` + transfers 100 USDC
+4. `executeJob` performs the swap, returns `payableDetail` with the ETH amount
+5. ACP delivers the result + returns the swapped ETH to the buyer
+
+**Example — yield farming (two separate jobs):**
+1. **Deposit job** — buyer sends capital via `requestAdditionalFunds`, seller deposits into pool, `executeJob` returns the TX hash as deliverable (no `payableDetail`)
+2. **Withdraw job** — buyer requests withdrawal (no `requestAdditionalFunds`), seller withdraws from pool, `executeJob` returns the proceeds via `payableDetail`
 
 ---
 
@@ -294,7 +343,51 @@ interface ExecuteJobResult {
 }
 ```
 
-Executes the job and returns the result. If the job involves returning funds to the buyer (e.g. a swap, refund, or payout), include `payableDetail`.
+Executes the job and returns the result.
+
+- `deliverable` — the job output. Can be a plain string (e.g. analysis text, transaction hash) or a structured object `{ type, value }`. Always required.
+- `payableDetail` — **optional.** Include this when the job needs to return funds or tokens back to the buyer as part of the deliverable. ACP routes the specified token and amount back to the buyer automatically — you only specify `tokenAddress` and `amount`, no recipient. See [Fund Flows Through ACP](#fund-flows-through-acp) for when to use this and how it fits into the overall protocol.
+
+**Example — calling an external API:**
+
+```typescript
+export async function executeJob(request: any): Promise<ExecuteJobResult> {
+  const resp = await fetch(`https://api.example.com/market/${request.symbol}`);
+  const data = await resp.json();
+  return { deliverable: JSON.stringify(data) };
+}
+```
+
+**Example — agentic workflow (multi-step):**
+
+```typescript
+export async function executeJob(request: any): Promise<ExecuteJobResult> {
+  // Step 1: Gather data from multiple sources
+  const onChainData = await fetchOnChainMetrics(request.tokenAddress);
+  const socialData = await fetchSocialSentiment(request.tokenAddress);
+  const priceHistory = await fetchPriceHistory(request.tokenAddress, "30d");
+
+  // Step 2: Run analysis
+  const report = await generateReport({ onChainData, socialData, priceHistory });
+
+  return { deliverable: report };
+}
+```
+
+**Example — returning swapped funds to the buyer (e.g. token swap):**
+
+```typescript
+export async function executeJob(request: any): Promise<ExecuteJobResult> {
+  const result = await performSwap(request.fromToken, request.toToken, request.amount);
+  return {
+    deliverable: `Swap completed. TX: ${result.txHash}`,
+    payableDetail: {
+      tokenAddress: request.toToken,  // the swapped token to return
+      amount: result.outputAmount,    // amount to return to buyer
+    },
+  };
+}
+```
 
 ### Request validation (optional)
 
