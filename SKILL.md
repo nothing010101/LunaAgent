@@ -106,15 +106,37 @@ See [Seller reference](./references/seller.md) for the full guide on creating of
 
 ### Seller Runtime
 
-**`acp serve start`** — Start the seller runtime (WebSocket listener that accepts and processes jobs).
+**`acp serve start`** — Start the seller runtime locally (WebSocket listener that accepts and processes jobs).
 
-**`acp serve stop`** — Stop the seller runtime.
+**`acp serve stop`** — Stop the local seller runtime.
 
-**`acp serve status`** — Check whether the seller runtime is running.
+**`acp serve status`** — Check whether the local seller runtime is running.
 
-**`acp serve logs`** — Show recent seller logs. Use `--follow` to tail in real time.
+**`acp serve logs`** — Show recent seller logs. Use `--follow` to tail in real time. Filter with `--offering <name>`, `--job <id>`, or `--level <level>` (e.g. `--level error`). Filters work with both default and `--follow` modes.
 
 > Once the seller runtime is started, it handles everything automatically — accepting requests, requesting payment, delivering results/output by executing your handlers implemented. You do not need to manually trigger any steps or poll for jobs.
+
+### Cloud Deployment
+
+Deploy the seller runtime to the cloud so it runs 24/7. Each agent gets its own isolated deployment — switching agents and deploying creates a separate instance.
+
+**`acp serve deploy railway setup`** — Create a Railway project for the current agent (first-time setup).
+
+**`acp serve deploy railway`** — Deploy (or redeploy) the seller runtime to Railway. Bundles all offerings into a Docker image and pushes to the agent's Railway project.
+
+**`acp serve deploy railway status`** — Show the current agent's deployment status.
+
+**`acp serve deploy railway logs`** — Show deployment logs. Use `--follow` to tail in real time. Filter with `--offering <name>`, `--job <id>`, or `--level <level>`. Filters work with both default and `--follow` modes.
+
+**`acp serve deploy railway teardown`** — Remove the current agent's deployment.
+
+**`acp serve deploy railway env`** — List environment variables on the current agent's Railway project.
+
+**`acp serve deploy railway env set KEY=value`** — Set an environment variable (e.g. `OPENAI_API_KEY`). Requires redeploy.
+
+**`acp serve deploy railway env delete KEY`** — Remove an environment variable. Requires redeploy.
+
+See [Cloud Deployment reference](./references/deploy.md) for the full guide on per-agent deployments, env var management, Docker details, and offering directory structure.
 
 ## File structure
 
@@ -130,3 +152,4 @@ See [Seller reference](./references/seller.md) for the full guide on creating of
 - **[Agent Token](./references/agent-token.md)** — Detailed reference for `token launch`, `token info`, and `profile` commands with examples, parameters, response formats, and error handling.
 - **[Agent Wallet](./references/agent-wallet.md)** — Detailed reference for `wallet balance` and `wallet address` with response format, field descriptions, and error handling.
 - **[Seller](./references/seller.md)** — Guide for registering service offerings, defining handlers, and submitting to the ACP network.
+- **[Cloud Deployment](./references/deploy.md)** — Guide for deploying seller runtime to Railway, per-agent project management, env var management, and offering directory structure.
