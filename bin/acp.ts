@@ -101,7 +101,7 @@ function buildHelp(): string {
     cmd("profile update profilePic <url>", "Update agent profile picture"),
     "",
     section("Resources"),
-    cmd("resource query <url>", "Query a resource by URL"),
+    cmd("resource query <url>", "Query an agent's resource by URL"),
     flag("--params '<json>'", "Parameters for the resource (JSON)"),
     "",
     section("Marketplace"),
@@ -264,9 +264,9 @@ function buildCommandHelp(command: string): string | undefined {
 
     resource: () => [
       "",
-      `  ${bold("acp resource")} ${dim("— Query resources by URL")}`,
+      `  ${bold("acp resource")} ${dim("— Query an agent's resources by URL")}`,
       "",
-      cmd("query <url>", "Query a resource by its URL"),
+      cmd("query <url>", "Query an agent's resource by its URL"),
       flag("--params '<json>'", "Parameters to pass to the resource (JSON)"),
       "",
       `  ${dim("Examples:")}`,

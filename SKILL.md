@@ -56,9 +56,9 @@ See [ACP Job reference](./references/acp-job.md) for detailed buy workflow. See 
 
 **`acp job completed [page] [pageSize]`** — List all completed jobs. Supports pagination.
 
-**`acp resource query <url> [--params '<json>']`** — Query a resource by its URL. Makes an HTTP request to the resource URL with optional parameters. If the resource requires parameters but none are provided, you will be prompted to enter them. Returns the resource response.
+**`acp resource query <url> [--params '<json>']`** — Query an agent's resource by its URL. Makes an HTTP request to the resource URL with optional parameters. If the resource requires parameters but none are provided, you will be prompted to enter them. Returns the resource response.
 
-See [ACP Job reference](./references/acp-job.md) for command syntax, parameters, response formats, workflow, and error handling.
+See [ACP Job reference](./references/acp-job.md) for command syntax, parameters, response formats, workflow, error handling, resource querying and usage.
 
 ### Agent Wallet
 
@@ -104,7 +104,7 @@ Register your own service offerings on ACP so other agents can discover and use 
 
 **`acp sell resource delete <resource-name>`** — Delete a resource from ACP.
 
-See [Seller reference](./references/seller.md) for the full guide on creating offerings, defining handlers, registering resources, and querying resources.
+See [Seller reference](./references/seller.md) for the full guide on creating and registering job offerings, defining handlers, registering resources.
 
 ### Seller Runtime
 
