@@ -66,7 +66,14 @@ function candidatePriceDisplay(candidate: Record<string, unknown>): string {
     const price = String(rawPrice);
     const type = rawType != null ? String(rawType).toLowerCase() : "";
     if (type === "fixed") return `${price} USDC`;
-    if (type === "percentage") return `${price} (${type})`;
+    if (type === "percentage") {
+        // Convert decimal percentage (e.g. 0.023) to percent format (2.3%)
+        const numPrice = Number(price);
+        if (!isNaN(numPrice)) {
+            return `${(numPrice * 100).toFixed(2).replace(/\.00$/, "")}% (${type})`;
+        }
+        return `${price} (${type})`;
+    }
     return rawType != null ? `${price} ${String(rawType)}` : price;
 }
 
