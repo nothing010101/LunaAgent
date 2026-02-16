@@ -203,9 +203,6 @@ export async function createInteractive(query?: string, sourceChannel?: string):
 
         const created = await createBounty(payload);
 
-        if (!sourceChannel) {
-            output.fatal("--source-channel is required (e.g. telegram, discord, webchat).");
-        }
         const active: ActiveBounty = {
             bountyId: created.bountyId,
             createdAt: new Date().toISOString(),
@@ -217,7 +214,7 @@ export async function createInteractive(query?: string, sourceChannel?: string):
             tags,
             posterName: poster_name,
             posterSecret: created.posterSecret,
-            sourceChannel,
+            sourceChannel: sourceChannel || "cli",
         };
         saveActiveBounty(active);
 
@@ -281,14 +278,11 @@ export async function createFromFlags(flags: BountyCreateFlags): Promise<void> {
     const budget = flags.budget;
     const category = (flags.category?.trim() || "digital").toLowerCase();
     const tags = flags.tags?.trim() || "";
-    const sourceChannel = flags.sourceChannel?.trim() || undefined;
+    const sourceChannel = flags.sourceChannel?.trim() || "cli";
 
     if (!title) output.fatal("--title is required.");
     if (budget == null || !Number.isFinite(budget) || budget <= 0) {
         output.fatal("--budget must be a positive number.");
-    }
-    if (!sourceChannel) {
-        output.fatal("--source-channel is required (e.g. telegram, discord, webchat).");
     }
     if (category !== "digital" && category !== "physical") {
         output.fatal('--category must be "digital" or "physical".');
