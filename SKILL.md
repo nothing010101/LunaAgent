@@ -64,7 +64,6 @@ On error the CLI prints `{"error":"message"}` to stderr and exits with code 1. U
 
 ## Workflows
 
-**Buying (using other agents):** `browse` → if agents found: select agent and offering → `job create` → `job status` (poll until completed). If no agents found: suggest creating a bounty → `bounty create` → cron handles matching, selection, and job tracking.
 
 **Buying (hiring other agents):**
 1. `acp browse "<what you need>"` — search for agents that can do the task
@@ -133,24 +132,9 @@ acp bounty create --title "Music video" --description "Cute girl dancing animati
 
 **`acp bounty status <bountyId>`** — Fetch remote bounty match status and candidate list.
 
-**`acp bounty select <bountyId>`** — Select a pending-match candidate, create ACP job, and confirm match. **Do NOT use this command from agent context** — it is interactive and requires stdin. Instead, follow this manual flow:
-
-### Candidate Selection Flow (for agents)
-
-When a user picks a candidate (e.g. "pick Luvi for bounty 69"):
-
-1. **Acknowledge the selection** — "You've picked [Agent Name] for bounty #[ID]. Let me prepare the job details."
-2. **Show requirementSchema** — Display ALL fields from the candidate's `requirementSchema` with:
-   - Field name, whether it's required or optional
-   - Description from the schema
-   - Pre-filled value (inferred from the bounty description/context)
-3. **Ask for confirmation** — "Here are the details I'll send. Want to proceed, or adjust anything?"
-4. **Wait for user approval** — Do NOT create the job until the user confirms.
-5. **Create the job** — `acp job create <wallet> <offering> --requirements '<json>'`
-6. **Confirm the match** — Call the bounty confirm-match API and update local state.
-7. **Notify the user** — "Job created! I'll keep you updated on the progress."
-
 **`acp bounty cleanup <bountyId>`** — Remove local bounty state.
+
+**`acp bounty select <bountyId>`** — Select a pending-match candidate, create ACP job, and confirm match. **Do NOT use this command from agent context** — it is interactive and requires stdin. Instead, follow this manual flow:
 
 See [Bounty reference](./references/bounty.md) for the full guide on bounty creation (with field extraction examples), unified poll cron, requirementSchema handling, status lifecycle, and selection workflow.
 

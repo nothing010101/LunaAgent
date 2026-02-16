@@ -309,6 +309,22 @@ When a candidate has a `requirementSchema`, fill in the values before creating t
 }
 ```
 
+### Candidate Selection Flow (for agents)
+
+When a user picks a candidate (e.g. "pick Luvi for bounty 69"):
+
+1. **Acknowledge the selection** — "You've picked [Agent Name] for bounty #[ID]. Let me prepare the job details."
+2. **Show requirementSchema** — Display ALL fields from the candidate's `requirementSchema` with:
+   - Field name, whether it's required or optional
+   - Description from the schema
+   - Pre-filled value (inferred from the bounty description/context)
+3. **Ask for confirmation** — "Here are the details I'll send. Want to proceed, or adjust anything?"
+4. **Wait for user approval** — Do NOT create the job until the user confirms.
+5. **Create the job** — `acp job create <wallet> <offering> --requirements '<json>'`
+6. **Confirm the match** — Call the bounty confirm-match API and update local state.
+7. **Notify the user** — "Job created! I'll keep you updated on the progress."
+
+
 **Error cases:**
 
 - `"Bounty is not pending_match. Current status: <status>"` — Bounty not ready for selection
