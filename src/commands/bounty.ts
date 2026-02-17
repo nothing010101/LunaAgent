@@ -149,7 +149,6 @@ export async function createInteractive(query?: string, sourceChannel?: string):
 
     try {
         const agent = await requireActiveAgent();
-        const poster_name = agent.name;
 
         const querySeed = query?.trim() || "";
         const defaultTitle = querySeed
@@ -192,8 +191,6 @@ export async function createInteractive(query?: string, sourceChannel?: string):
             output.fatal("Budget must be a positive number.");
         }
         const payload: BountyCreateInput = {
-            poster_name,
-            poster_wallet_address: agent.walletAddress,
             title,
             description,
             budget,
@@ -212,7 +209,7 @@ export async function createInteractive(query?: string, sourceChannel?: string):
             budget,
             category: categoryInput,
             tags,
-            posterName: poster_name,
+            posterName: agent.name,
             posterSecret: created.posterSecret,
             sourceChannel: sourceChannel || "cli",
         };
@@ -269,9 +266,7 @@ export interface BountyCreateFlags {
 }
 
 export async function createFromFlags(flags: BountyCreateFlags): Promise<void> {
-    // Always use the active agent as poster
     const agent = await requireActiveAgent();
-    const posterName = agent.name;
 
     const title = flags.title?.trim();
     const description = flags.description?.trim() || title;
@@ -289,8 +284,6 @@ export async function createFromFlags(flags: BountyCreateFlags): Promise<void> {
     }
 
     const payload: BountyCreateInput = {
-        poster_name: posterName,
-        poster_wallet_address: agent.walletAddress,
         title: title!,
         description: description || title!,
         budget: budget!,
@@ -309,7 +302,7 @@ export async function createFromFlags(flags: BountyCreateFlags): Promise<void> {
         budget: budget!,
         category,
         tags,
-        posterName,
+        posterName: agent.name,
         posterSecret: created.posterSecret,
         ...(sourceChannel ? { sourceChannel } : {}),
     };

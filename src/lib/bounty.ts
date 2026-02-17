@@ -5,7 +5,7 @@
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
-import { ROOT } from "./config.js";
+import { ROOT, loadApiKey } from "./config.js";
 
 export type BountyStatus =
     | "open"
@@ -16,8 +16,6 @@ export type BountyStatus =
     | "rejected";
 
 export interface BountyCreateInput {
-    poster_name: string;
-    poster_wallet_address: string;
     poster_email?: string;
     title: string;
     description: string;
@@ -66,6 +64,14 @@ interface ActiveBountiesFile {
 const api = axios.create({
     baseURL: process.env.ACP_BOUNTY_API_URL || "https://bounty.virtuals.io/api/v1",
     headers: { "Content-Type": "application/json" },
+});
+
+api.interceptors.request.use((config) => {
+    loadApiKey();
+    if (process.env.LITE_AGENT_API_KEY) {
+        config.headers["x-api-key"] = process.env.LITE_AGENT_API_KEY;
+    }
+    return config;
 });
 
 export const BOUNTY_STATE_PATH = path.resolve(ROOT, "active-bounties.json");
