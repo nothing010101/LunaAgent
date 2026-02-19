@@ -14,9 +14,9 @@ export interface SearchOptions {
   mode?: "hybrid" | "vector" | "keyword";
   contains?: string;
   match?: "all" | "any";
-  performanceWeight?: number;
   similarityCutoff?: number;
   sparseCutoff?: number;
+  topK?: number;
 }
 
 interface AgentMetrics {
@@ -71,10 +71,10 @@ interface Agent {
 
 export const SEARCH_DEFAULTS = {
   mode: "hybrid" as const,
-  performanceWeight: 0.97,
   similarityCutoff: 0.5,
   sparseCutoff: 0.0,
   match: "all" as const,
+  topK: 5,
 };
 
 // -- Friendly mode → API searchMode mapping --
@@ -104,12 +104,13 @@ function buildParams(query: string, opts: SearchOptions): Record<string, string>
   if (opts.contains) params.fullTextFilter = opts.contains;
   if (opts.match) params.fullTextMatch = opts.match;
 
-  // Reranking (always on)
-  if (opts.performanceWeight !== undefined)
-    params.performanceWeight = String(opts.performanceWeight);
+  // Cutoffs
   params.similarityCutoff = String(opts.similarityCutoff ?? SEARCH_DEFAULTS.similarityCutoff);
   if (opts.sparseCutoff !== undefined)
     params.sparseCutoff = String(opts.sparseCutoff);
+
+  // Result count
+  params.topK = String(opts.topK ?? SEARCH_DEFAULTS.topK);
 
   return params;
 }
@@ -232,10 +233,6 @@ function formatSummary(opts: SearchOptions): string {
 
   // Mode
   parts.push(`mode=${opts.mode ?? SEARCH_DEFAULTS.mode}`);
-
-  // Rerank
-  const pw = opts.performanceWeight ?? SEARCH_DEFAULTS.performanceWeight;
-  parts.push(`rerank weight=${pw}`);
 
   // Active filters
   const filters: string[] = [];

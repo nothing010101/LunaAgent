@@ -13,6 +13,7 @@
 import { createRequire } from "module";
 import { setJsonMode } from "../src/lib/output.js";
 import { requireApiKey } from "../src/lib/config.js";
+import { SEARCH_DEFAULTS } from "../src/commands/search.js";
 
 const require = createRequire(import.meta.url);
 const { version: VERSION } = require("../package.json");
@@ -211,7 +212,7 @@ function buildCommandHelp(command: string): string | undefined {
       `  ${dim("Search pool: online agents that are either graduated or in the OpenClaw cluster.")}`,
       "",
       `  ${cyan("Search Mode")}`,
-      flag("--mode <hybrid|vector|keyword>", "Search strategy (default: hybrid)"),
+      flag("--mode <hybrid|vector|keyword>", `Search strategy (default: ${SEARCH_DEFAULTS.mode})`),
       `    ${dim("hybrid: BM25 + vector embeddings")}`,
       `    ${dim("vector: vector embeddings")}`,
       `    ${dim("keyword: BM25")}`,
@@ -219,17 +220,14 @@ function buildCommandHelp(command: string): string | undefined {
       "",
       `  ${cyan("Filters")}`,
       flag("--contains <text>", "Keep results containing these terms"),
-      flag("--match <all|any>", "Term matching for --contains (default: all)"),
+      flag("--match <all|any>", `Term matching for --contains (default: ${SEARCH_DEFAULTS.match})`),
       "",
       `  ${cyan("Reranking")}`,
-      flag("--performance-weight <0-1>", "Performance rerank weight (default: 0.97)"),
-      `    ${dim("Blends semantic relevance with agent performance metrics.")}`,
-      `    ${dim("Score = (1 - weight) × semantic + weight × performance")}`,
-      `    ${dim("0 = pure semantic, 1 = pure performance. Applied to top 5 results only.")}`,
-      flag("--similarity-cutoff <0-1>", "Min vector similarity score (default: 0.5)"),
-      flag("--sparse-cutoff <float>", "Min keyword score, keyword mode only (default: 0.0)"),
+      flag("--similarity-cutoff <0-1>", `Min vector similarity score (default: ${SEARCH_DEFAULTS.similarityCutoff})`),
+      flag("--sparse-cutoff <float>", `Min keyword score, keyword mode only (default: ${SEARCH_DEFAULTS.sparseCutoff})`),
+      flag("--top-k <n>", `Number of results to return (default: ${SEARCH_DEFAULTS.topK})`),
       "",
-      `  ${dim("Defaults: mode=hybrid, rerank weight=0.97, similarity cutoff=0.5")}`,
+      `  ${dim(`Defaults: mode=${SEARCH_DEFAULTS.mode}, similarity cutoff=${SEARCH_DEFAULTS.similarityCutoff}, top-k=${SEARCH_DEFAULTS.topK}`)}`,
       `  ${dim("Search pool: online agents that are either graduated or in the OpenClaw cluster")}`,
       "",
     ].join("\n"),
@@ -478,14 +476,14 @@ async function main(): Promise<void> {
       | undefined;
     searchArgs = removeFlagWithValue(searchArgs, "--match");
 
-    const perfWeight = getFlagValue(searchArgs, "--performance-weight");
-    searchArgs = removeFlagWithValue(searchArgs, "--performance-weight");
-
     const simCutoff = getFlagValue(searchArgs, "--similarity-cutoff");
     searchArgs = removeFlagWithValue(searchArgs, "--similarity-cutoff");
 
     const sparCutoff = getFlagValue(searchArgs, "--sparse-cutoff");
     searchArgs = removeFlagWithValue(searchArgs, "--sparse-cutoff");
+
+    const topK = getFlagValue(searchArgs, "--top-k");
+    searchArgs = removeFlagWithValue(searchArgs, "--top-k");
 
     // Remaining args (non-flags) form the query
     const query = searchArgs.filter((a) => a && !a.startsWith("-")).join(" ");
@@ -494,9 +492,9 @@ async function main(): Promise<void> {
       mode,
       contains,
       match: matchVal,
-      performanceWeight: perfWeight !== undefined ? parseFloat(perfWeight) : undefined,
       similarityCutoff: simCutoff !== undefined ? parseFloat(simCutoff) : undefined,
       sparseCutoff: sparCutoff !== undefined ? parseFloat(sparCutoff) : undefined,
+      topK: topK !== undefined ? parseInt(topK, 10) : undefined,
     });
   }
 
