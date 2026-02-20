@@ -13,6 +13,7 @@
 import { createRequire } from "module";
 import { setJsonMode } from "../src/lib/output.js";
 import { requireApiKey } from "../src/lib/config.js";
+import { SEARCH_DEFAULTS } from "../src/commands/search.js";
 
 const require = createRequire(import.meta.url);
 const { version: VERSION } = require("../package.json");
@@ -104,7 +105,10 @@ function buildHelp(): string {
     cmd("profile update profilePic <url>", "Update agent profile picture"),
     "",
     section("Marketplace"),
-    cmd("browse <query>", "Search agents on the marketplace"),
+    cmd("browse <query>", "Browse agents on the marketplace"),
+    flag("--mode <hybrid|vector|keyword>", "Search strategy (default: hybrid)"),
+    flag("--contains <text>", "Keep results containing these terms"),
+    flag("--match <all|any>", "Term matching for --contains (default: all)"),
     "",
     cmd("job create <wallet> <offering>", "Start a job with an agent"),
     flag("--requirements '<json>'", "Service requirements (JSON)"),
@@ -212,12 +216,35 @@ function buildCommandHelp(command: string): string | undefined {
     browse: () =>
       [
         "",
-        `  ${bold("acp browse <query>")} ${dim("— Search and discover agents")}`,
+        `  ${bold("acp browse <query>")} ${dim("— Browse agents on the marketplace")}`,
         "",
-        `  ${dim("Examples:")}`,
-        `    acp browse "trading"`,
-        `    acp browse "data analysis"`,
-        `    acp browse "content generation" --json`,
+        `  ${cyan("Search Mode")}`,
+        flag(
+          "--mode <hybrid|vector|keyword>",
+          `Search strategy (default: ${SEARCH_DEFAULTS.mode})`
+        ),
+        `    ${dim("hybrid: BM25 + vector embeddings")}`,
+        `    ${dim("vector: vector embeddings")}`,
+        `    ${dim("keyword: BM25")}`,
+        `    ${dim("Indexed data: agent name, agent description, and job descriptions.")}`,
+        "",
+        `  ${cyan("Search Filters and Configuration")}`,
+        flag("--contains <text>", "Keep results containing these terms"),
+        flag(
+          "--match <all|any>",
+          `Term matching for --contains (default: ${SEARCH_DEFAULTS.match})`
+        ),
+        flag(
+          "--similarity-cutoff <0-1>",
+          `Min vector similarity score (default: ${SEARCH_DEFAULTS.similarityCutoff})`
+        ),
+        flag(
+          "--sparse-cutoff <float>",
+          `Min keyword score, keyword mode only (default: ${SEARCH_DEFAULTS.sparseCutoff})`
+        ),
+        flag("--top-k <n>", `Number of results to return (default: ${SEARCH_DEFAULTS.topK})`),
+        "",
+        `  ${dim(`Defaults: mode=${SEARCH_DEFAULTS.mode}, similarity cutoff=${SEARCH_DEFAULTS.similarityCutoff}, top-k=${SEARCH_DEFAULTS.topK}`)}`,
         "",
       ].join("\n"),
 
@@ -465,6 +492,43 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Browse uses external API — no API key required
+  if (command === "browse") {
+    const { search } = await import("../src/commands/search.js");
+    let searchArgs = [subcommand, ...rest].filter(Boolean);
+
+    // Parse search options
+    const mode = getFlagValue(searchArgs, "--mode") as "hybrid" | "vector" | "keyword" | undefined;
+    searchArgs = removeFlagWithValue(searchArgs, "--mode");
+
+    const contains = getFlagValue(searchArgs, "--contains");
+    searchArgs = removeFlagWithValue(searchArgs, "--contains");
+
+    const matchVal = getFlagValue(searchArgs, "--match") as "all" | "any" | undefined;
+    searchArgs = removeFlagWithValue(searchArgs, "--match");
+
+    const simCutoff = getFlagValue(searchArgs, "--similarity-cutoff");
+    searchArgs = removeFlagWithValue(searchArgs, "--similarity-cutoff");
+
+    const sparCutoff = getFlagValue(searchArgs, "--sparse-cutoff");
+    searchArgs = removeFlagWithValue(searchArgs, "--sparse-cutoff");
+
+    const topK = getFlagValue(searchArgs, "--top-k");
+    searchArgs = removeFlagWithValue(searchArgs, "--top-k");
+
+    // Remaining args (non-flags) form the query
+    const query = searchArgs.filter((a) => a && !a.startsWith("-")).join(" ");
+
+    return search(query, {
+      mode,
+      contains,
+      match: matchVal,
+      similarityCutoff: simCutoff !== undefined ? parseFloat(simCutoff) : undefined,
+      sparseCutoff: sparCutoff !== undefined ? parseFloat(sparCutoff) : undefined,
+      topK: topK !== undefined ? parseInt(topK, 10) : undefined,
+    });
+  }
+
   // All other commands need API key
   requireApiKey();
 
@@ -481,12 +545,6 @@ async function main(): Promise<void> {
       if (subcommand === "topup") return wallet.topup();
       console.log(buildCommandHelp("wallet"));
       return;
-    }
-
-    case "browse": {
-      const { browse } = await import("../src/commands/browse.js");
-      const query = [subcommand, ...rest].filter((a) => !a.startsWith("-")).join(" ");
-      return browse(query);
     }
 
     case "job": {
