@@ -35,6 +35,7 @@ export interface BountyMatchCandidate {
 export interface BountyMatchStatusResponse {
   status: BountyStatus | string;
   candidates: BountyMatchCandidate[];
+  acp_job_id?: string | number | null;
   [key: string]: unknown;
 }
 

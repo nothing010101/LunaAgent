@@ -417,6 +417,14 @@ export async function poll(): Promise<void> {
             deliverable?: string;
             sourceChannel?: string;
         }>;
+        rejectedByProvider: Array<{
+            bountyId: string;
+            title: string;
+            description: string;
+            budget: number;
+            sourceChannel?: string;
+            candidates: Record<string, unknown>[];
+        }>;
         cleaned: Array<{
             bountyId: string;
             status: string;
@@ -430,6 +438,7 @@ export async function poll(): Promise<void> {
         checked: 0,
         pendingMatch: [],
         claimedJobs: [],
+        rejectedByProvider: [],
         cleaned: [],
         errors: [],
     };
@@ -438,6 +447,20 @@ export async function poll(): Promise<void> {
         result.checked += 1;
         try {
             // --- Claimed bounties: track ACP job status ---
+            if (b.status === "claimed" && !b.acpJobId) {
+                const remote = await getMatchStatus(b.bountyId);
+                const remoteJobId = String(remote.acp_job_id ?? "");
+                if (remoteJobId) {
+                    saveActiveBounty({ ...b, acpJobId: remoteJobId });
+                    b.acpJobId = remoteJobId;
+                } else {
+                    result.errors.push({
+                        bountyId: b.bountyId,
+                        error: "Bounty is claimed but missing acpJobId — cannot track job status",
+                    });
+                    continue;
+                }
+            }
             if (b.status === "claimed" && b.acpJobId) {
                 let jobPhase = "";
                 let deliverable: string | undefined;
@@ -458,8 +481,54 @@ export async function poll(): Promise<void> {
                 const isTerminalJob =
                     jobPhase === "COMPLETED" || jobPhase === "REJECTED" || jobPhase === "EXPIRED";
 
-                if (isTerminalJob) {
-                    // Sync bounty status via /job-status endpoint
+                if (jobPhase === "REJECTED") {
+                    // Provider rejected — sync with backend (switches bounty back to open)
+                    if (b.posterSecret) {
+                        try {
+                            await syncBountyJobStatus({
+                                bountyId: b.bountyId,
+                                posterSecret: b.posterSecret,
+                            });
+                        } catch {
+                            // non-fatal
+                        }
+                    }
+
+                    // Reset local state: back to open, clear job fields, allow re-notification
+                    const reset: ActiveBounty = {
+                        ...b,
+                        status: "open",
+                        selectedCandidateId: undefined,
+                        acpJobId: undefined,
+                        notifiedPendingMatch: false,
+                    };
+                    saveActiveBounty(reset);
+
+                    // Re-fetch to check if backend already has new candidates
+                    let candidates: Record<string, unknown>[] = [];
+                    try {
+                        const fresh = await getMatchStatus(b.bountyId);
+                        const freshStatus = String(fresh.status).toLowerCase();
+                        if (freshStatus === "pending_match" && Array.isArray(fresh.candidates) && fresh.candidates.length > 0) {
+                            candidates = fresh.candidates.map((c) =>
+                                normalizeCandidateForWatch(c as Record<string, unknown>)
+                            );
+                            saveActiveBounty({ ...reset, status: "pending_match", notifiedPendingMatch: true });
+                        }
+                    } catch {
+                        // non-fatal — candidates will be picked up on next poll
+                    }
+
+                    result.rejectedByProvider.push({
+                        bountyId: b.bountyId,
+                        title: b.title,
+                        description: b.description,
+                        budget: b.budget,
+                        ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}),
+                        candidates,
+                    });
+                } else if (isTerminalJob) {
+                    // COMPLETED or EXPIRED — clean up
                     if (b.posterSecret) {
                         try {
                             await syncBountyJobStatus({
@@ -504,6 +573,27 @@ export async function poll(): Promise<void> {
                     status,
                     ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}),
                 });
+                continue;
+            }
+
+            if (status === "claimed") {
+                const remoteJobId = String(remote.acp_job_id ?? "");
+                if (remoteJobId) {
+                    saveActiveBounty({ ...b, status: "claimed", acpJobId: remoteJobId });
+                    result.claimedJobs.push({
+                        bountyId: b.bountyId,
+                        acpJobId: remoteJobId,
+                        title: b.title,
+                        jobPhase: "UNKNOWN",
+                        ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}),
+                    });
+                } else {
+                    saveActiveBounty({ ...b, status: "claimed" });
+                    result.errors.push({
+                        bountyId: b.bountyId,
+                        error: "Bounty is claimed but remote response missing acp_job_id",
+                    });
+                }
                 continue;
             }
 
@@ -552,6 +642,7 @@ export async function poll(): Promise<void> {
         output.heading("Bounty Poll");
         output.field("Checked", r.checked);
         output.field("Pending Match", r.pendingMatch.length);
+        output.field("Rejected by Provider", r.rejectedByProvider.length);
         output.field("Claimed Jobs", r.claimedJobs.length);
         output.field("Cleaned", r.cleaned.length);
         output.field("Errors", r.errors.length);
@@ -567,6 +658,28 @@ export async function poll(): Promise<void> {
                     output.log(`        ${c.agentName} — ${c.offeringName} (${price})`);
                 }
                 output.log(`      -> run: acp bounty select ${p.bountyId}`);
+            }
+        }
+        if (r.rejectedByProvider.length > 0) {
+            output.log("\n  Rejected by Provider (bounty reopened for new candidates):");
+            for (const rj of r.rejectedByProvider) {
+                const candidateCount = rj.candidates.length;
+                output.log(
+                    `    - Bounty ${rj.bountyId}: "${rj.title}" — provider rejected the job`
+                );
+                if (candidateCount > 0) {
+                    output.log(`      ${candidateCount} new candidate(s) available:`);
+                    for (const c of rj.candidates) {
+                        const price =
+                            (c as any).priceType === "fixed"
+                                ? `${(c as any).price} USDC`
+                                : (c as any).price != null ? String((c as any).price) : "N/A";
+                        output.log(`        ${(c as any).agentName} — ${(c as any).offeringName} (${price})`);
+                    }
+                    output.log(`      -> run: acp bounty select ${rj.bountyId}`);
+                } else {
+                    output.log(`      Bounty is back to open — waiting for new candidates.`);
+                }
             }
         }
         if (r.claimedJobs.length > 0) {
@@ -615,7 +728,12 @@ export async function status(bountyId: string): Promise<void> {
     const normalized = String(remote.status).toLowerCase();
     const isTerminal =
         normalized === "fulfilled" || normalized === "expired" || normalized === "rejected";
-    const next = { ...active, status: remote.status };
+    const remoteJobId = remote.acp_job_id != null ? String(remote.acp_job_id) : undefined;
+    const next = {
+        ...active,
+        status: remote.status,
+        ...(normalized === "claimed" && remoteJobId ? { acpJobId: remoteJobId } : {}),
+    };
     if (isTerminal) {
         removeActiveBounty(bountyId);
         try {

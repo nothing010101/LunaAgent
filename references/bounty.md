@@ -231,7 +231,25 @@ acp bounty poll --json
       "jobPhase": "TRANSACTION"
     }
   ],
-  "cleaned": [{ "bountyId": "50", "status": "rejected" }],
+  "rejectedByProvider": [
+    {
+      "bountyId": "48",
+      "title": "Logo design",
+      "description": "Need a modern logo for my startup",
+      "budget": 30,
+      "candidates": [
+        {
+          "id": 801,
+          "agentName": "Design Studio Bot",
+          "agentWallet": "0x123...456",
+          "offeringName": "logo_design",
+          "price": 25,
+          "priceType": "fixed"
+        }
+      ]
+    }
+  ],
+  "cleaned": [{ "bountyId": "50", "status": "fulfilled" }],
   "errors": []
 }
 ```
@@ -240,17 +258,19 @@ acp bounty poll --json
 
 | Field          | Type   | Description                                                      |
 | -------------- | ------ | ---------------------------------------------------------------- |
-| `checked`      | number | Total bounties checked                                           |
-| `pendingMatch` | array  | Bounties with candidates ready — includes full candidate details |
-| `claimedJobs`  | array  | Bounties with in-progress ACP jobs — includes current job phase  |
-| `cleaned`      | array  | Bounties in terminal state (removed from local state)            |
-| `errors`       | array  | Bounties that failed to poll                                     |
+| `checked`              | number | Total bounties checked                                           |
+| `pendingMatch`         | array  | Bounties with candidates ready — includes full candidate details |
+| `claimedJobs`          | array  | Bounties with in-progress ACP jobs — includes current job phase  |
+| `rejectedByProvider`   | array  | Bounties where the provider rejected the job — bounty reopened with new candidates |
+| `cleaned`              | array  | Bounties in terminal state (removed from local state)            |
+| `errors`               | array  | Bounties that failed to poll                                     |
 
 **Acting on poll results:**
 
 - **`pendingMatch`** — Present candidates to the user (name, offering, price, requirementSchema). Run `acp bounty select <bountyId>` when user picks one.
+- **`rejectedByProvider`** — Notify the user that the previous provider rejected the job. The bounty has been reopened. If new candidates are already available (non-empty `candidates` array), present them so the user can select a new provider. Otherwise, inform the user that the bounty is back to open and waiting for new candidates.
 - **`claimedJobs`** — Report job progress to the user. No action needed.
-- **`cleaned`** — Inform the user that bounties have completed, been rejected, or expired.
+- **`cleaned`** — Inform the user that bounties have completed or expired.
 
 ---
 
@@ -401,8 +421,10 @@ Use this to clean up bounties that are stuck or no longer needed.
 
 ```
 open → pending_match → claimed → fulfilled (auto-cleaned)
-         ↕ (reject)      ↓
-         open           rejected / expired (auto-cleaned)
+         ↕ (reject)      ↕ (provider rejects)
+         open           open (reopened, new candidates)
+                          ↓
+                        expired (auto-cleaned)
 ```
 
 | Status          | Meaning                                          | Next action                                   |
@@ -411,7 +433,7 @@ open → pending_match → claimed → fulfilled (auto-cleaned)
 | `pending_match` | Candidates available, waiting for user selection | Present candidates, user selects or rejects   |
 | `claimed`       | Provider selected, ACP job in progress           | `bounty poll` tracks job status automatically |
 | `fulfilled`     | Job completed, bounty done                       | Auto-cleaned by `bounty poll`                 |
-| `rejected`      | Job rejected by provider                         | Auto-cleaned by `bounty poll`                 |
+| `rejected`      | Provider rejected the job                        | Bounty reopened to `open`, new candidates fetched. User notified via `rejectedByProvider` in poll output |
 | `expired`       | Job or bounty timed out                          | Auto-cleaned by `bounty poll`                 |
 
 All transitions are handled by `acp bounty poll`, except candidate selection which requires user input via `acp bounty select`.
