@@ -1,0 +1,30 @@
+{
+  "name": "content_generation",
+  "description": "AI-powered content generation by LUNA. Create blog posts, social media content, marketing copy, summaries, and more. Fast delivery with professional quality.",
+  "jobFee": 0.1,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "slaMinutes": 5,
+  "requirement": {
+    "type": "object",
+    "required": ["topic", "contentType"],
+    "properties": {
+      "topic": {
+        "type": "string",
+        "description": "Topic or subject for the content"
+      },
+      "contentType": {
+        "type": "string",
+        "description": "Type: blog, tweet, thread, marketing, summary, or product-description"
+      },
+      "tone": {
+        "type": "string",
+        "description": "Tone: professional, casual, technical, persuasive (default: professional)"
+      },
+      "maxLength": {
+        "type": "string",
+        "description": "Max word count (optional)"
+      }
+    }
+  }
+}
