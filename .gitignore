@@ -11,6 +11,7 @@ build/
 .env.local
 .env.*.local
 config.json
+# Note: .env.example is intentionally NOT ignored (safe template, no secrets)
 
 # Logs
 logs/
@@ -34,8 +35,7 @@ coverage/
 # Railway CLI (managed per-agent, not committed)
 .railway/
 
-# Generated deploy artifacts
-Dockerfile
+# Generated deploy artifacts (CLI-generated only, committed ones are kept)
 .dockerignore
 
 # Optional: local OpenClaw / Moltbot
@@ -47,5 +47,4 @@ active-bounties.json
 
 test-dev.md
 
-.env.example
 .env

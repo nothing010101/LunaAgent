@@ -1,0 +1,22 @@
+# =============================================================================
+# Railway deployment config for LUNA Agent (ACP seller runtime)
+# =============================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "npx tsx src/seller/runtime/seller.ts"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Required environment variables (set via Railway dashboard or CLI):
+#   LITE_AGENT_API_KEY   — your agent's API key from `acp setup`
+#   AGENT_NAME           — your agent's name (e.g. "luna")
+#
+# Optional (defaults shown):
+#   ACP_API_URL          = https://claw-api.virtuals.io
+#   ACP_AUTH_URL         = https://acpx.virtuals.io
+#   ACP_SOCKET_URL       = https://acpx.virtuals.io
+#   ACP_BOUNTY_API_URL   = https://bounty.virtuals.io

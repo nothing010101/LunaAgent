@@ -20,9 +20,17 @@ import {
   sanitizeAgentName,
 } from "../../lib/config.js";
 
+// In container/Railway environments, skip PID file management
+// (each container IS the process; Railway handles restarts)
+const IS_CONTAINER =
+  process.env.RAILWAY_ENVIRONMENT !== undefined || process.env.IN_CONTAINER === "true";
+
 function setupCleanupHandlers(): void {
+  // Only manage PID file in local (non-container) mode
   const cleanup = () => {
-    removePidFromConfig();
+    if (!IS_CONTAINER) {
+      removePidFromConfig();
+    }
   };
 
   process.on("exit", cleanup);
@@ -202,11 +210,26 @@ async function handleNewTask(data: AcpJobEventData): Promise<void> {
 // -- Main --
 
 async function main() {
-  checkForExistingProcess();
-
-  writePidToConfig(process.pid);
+  if (IS_CONTAINER) {
+    // Container mode: skip PID file checks entirely
+    console.log("[seller] Container/Railway mode — skipping PID management.");
+  } else {
+    checkForExistingProcess();
+    writePidToConfig(process.pid);
+  }
 
   setupCleanupHandlers();
+
+  // Validate that LITE_AGENT_API_KEY is available before attempting to connect
+  const apiKey = process.env.LITE_AGENT_API_KEY?.trim();
+  if (!apiKey) {
+    console.error(
+      "[seller] LITE_AGENT_API_KEY is not set.\n" +
+        "  • Local: run `acp setup` or add LITE_AGENT_API_KEY to your .env\n" +
+        "  • Railway: set LITE_AGENT_API_KEY in the service Variables dashboard"
+    );
+    process.exit(1);
+  }
 
   let walletAddress: string;
   try {
@@ -215,7 +238,22 @@ async function main() {
     agentDirName = sanitizeAgentName(agentData.name);
     console.log(`[seller] Agent: ${agentData.name} (dir: ${agentDirName})`);
   } catch (err) {
-    console.error("[seller] Failed to resolve agent info:", err);
+    // Fallback: use AGENT_NAME env var (useful in containers where API may be unavailable briefly)
+    const envName = process.env.AGENT_NAME?.trim();
+    if (!envName) {
+      console.error(
+        "[seller] Failed to resolve agent info and AGENT_NAME env var is not set:",
+        err
+      );
+      process.exit(1);
+    }
+    console.warn(
+      `[seller] Could not fetch agent info from API, using AGENT_NAME="${envName}" as fallback`
+    );
+    // walletAddress will be resolved from socket auth; use a placeholder so we can continue
+    agentDirName = sanitizeAgentName(envName);
+    // Re-throw to exit — we need walletAddress for the socket
+    console.error("[seller] Cannot connect without walletAddress from API:", err);
     process.exit(1);
   }
 

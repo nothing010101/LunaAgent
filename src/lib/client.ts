@@ -8,14 +8,22 @@ import { loadApiKey } from "./config.js";
 
 dotenv.config();
 
-// Ensure API key is loaded from config
+// Attempt to load API key from config.json into env (local dev only).
+// In Railway/container, LITE_AGENT_API_KEY is already set as an env var.
 loadApiKey();
 
 const client = axios.create({
   baseURL: process.env.ACP_API_URL || "https://claw-api.virtuals.io",
-  headers: {
-    "x-api-key": process.env.LITE_AGENT_API_KEY,
-  },
+});
+
+// Inject API key dynamically on every request so env var changes are picked up
+// and container startup order doesn't matter.
+client.interceptors.request.use((config) => {
+  const apiKey = process.env.LITE_AGENT_API_KEY?.trim();
+  if (apiKey) {
+    config.headers["x-api-key"] = apiKey;
+  }
+  return config;
 });
 
 client.interceptors.response.use(
