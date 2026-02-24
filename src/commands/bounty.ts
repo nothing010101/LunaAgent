@@ -14,6 +14,7 @@ import {
   type BountyCreateInput,
   createBounty,
   getActiveBounty,
+  getBountyDetails,
   getMatchStatus,
   listActiveBounties,
   removeActiveBounty,
@@ -710,81 +711,75 @@ export async function poll(): Promise<void> {
   });
 }
 
-export async function status(bountyId: string): Promise<void> {
-  if (!bountyId) output.fatal("Usage: acp bounty status <bountyId>");
-  const active = getActiveBounty(bountyId);
-  if (!active) output.fatal(`Bounty not found in local state: ${bountyId}`);
+export async function status(bountyId: string, flags?: { sync?: boolean }): Promise<void> {
+  if (!bountyId) output.fatal("Usage: acp bounty status <bountyId> [--sync]");
 
-  if (active.posterSecret) {
+  let bounty = getActiveBounty(bountyId);
+
+  if (flags?.sync && bounty) {
+    if (!bounty.posterSecret) output.fatal("Cannot sync: missing poster secret for this bounty.");
     try {
-      await syncBountyJobStatus({
-        bountyId,
-        posterSecret: active.posterSecret,
-      });
-    } catch (e) {
-      output.warn(
-        `Failed to sync bounty job status: ${e instanceof Error ? e.message : String(e)}`
-      );
+      await syncBountyJobStatus({ bountyId, posterSecret: bounty.posterSecret });
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.detail?.detail ??
+        e?.response?.data?.detail ??
+        (e instanceof Error ? e.message : String(e));
+      output.warn(`Failed to sync job status: ${msg}`);
     }
   }
 
-  const remote = await getMatchStatus(bountyId);
-  const normalized = String(remote.status).toLowerCase();
-  const isTerminal =
-    normalized === "fulfilled" || normalized === "expired" || normalized === "rejected";
-  const remoteJobId = remote.acp_job_id != null ? String(remote.acp_job_id) : undefined;
-  const next = {
-    ...active,
-    status: remote.status,
-    ...(normalized === "claimed" && remoteJobId ? { acpJobId: remoteJobId } : {}),
-  };
-  if (isTerminal) {
-    removeActiveBounty(bountyId);
+  if (!bounty) {
     try {
-      removeBountyPollCronIfUnused();
-    } catch {
-      // non-fatal
+      const remote = await getBountyDetails(bountyId);
+      bounty = {
+        bountyId: String(remote.id ?? bountyId),
+        createdAt: String(remote.created_at ?? ""),
+        status: String(remote.status ?? ""),
+        title: String(remote.title ?? ""),
+        description: String(remote.description ?? ""),
+        budget: Number(remote.budget ?? 0),
+        category: String(remote.category ?? "digital"),
+        tags: String(remote.tags ?? ""),
+        posterName: String(remote.poster_name ?? ""),
+        posterSecret: "",
+      };
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.detail?.detail ??
+        e?.response?.data?.detail ??
+        (e instanceof Error ? e.message : String(e));
+      output.fatal(`Bounty not found: ${msg}`);
     }
-  } else {
-    saveActiveBounty(next);
   }
 
   output.output(
     {
-      bountyId,
-      local: next,
-      remote,
+      bountyId: bounty.bountyId,
+      status: bounty.status,
+      title: bounty.title,
+      description: bounty.description,
+      budget: bounty.budget,
+      category: bounty.category,
+      tags: bounty.tags,
+      ...(bounty.acpJobId ? { acpJobId: bounty.acpJobId } : {}),
+      ...(bounty.sourceChannel ? { sourceChannel: bounty.sourceChannel } : {}),
+      createdAt: bounty.createdAt,
     },
     (data) => {
       output.heading(`Bounty ${data.bountyId}`);
-      output.field("Status", data.remote.status);
-      output.field("Title", data.local.title);
-      output.field("Candidates", data.remote.candidates.length);
-      if (isTerminal) {
-        output.log("  Local bounty record cleaned up (terminal status).");
-      }
+      output.field("Status", data.status);
+      output.field("Title", data.title);
+      output.field("Description", data.description);
+      output.field("Budget", data.budget);
+      output.field("Category", data.category);
+      output.field("Tags", data.tags);
+      if (data.acpJobId) output.field("ACP Job ID", data.acpJobId);
+      if (data.sourceChannel) output.field("Source Channel", data.sourceChannel);
+      output.field("Created", data.createdAt);
       output.log("");
     }
   );
-
-  if (!output.isJsonMode() && String(remote.status).toLowerCase() === "pending_match") {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    let shouldSelect = false;
-    try {
-      const answer = (await question(rl, "  Bounty is pending_match. Select provider now? (Y/n): "))
-        .trim()
-        .toLowerCase();
-      shouldSelect = answer === "y" || answer === "yes" || answer === "";
-    } finally {
-      rl.close();
-    }
-    if (shouldSelect) {
-      await select(bountyId);
-    }
-  }
 }
 
 export async function select(bountyId: string): Promise<void> {
